@@ -2,7 +2,6 @@
 #include <Elegoo_TFTLCD.h>  // Hardware-specific library
 #include <TouchScreen.h>
 
-#include <math.h>
 
 #if defined(__SAM3X8E__)
 #undef __FlashStringHelper::F(string_literal)
@@ -51,12 +50,10 @@ int y;
 int selection;
 String selection2 = "";
 
-
-long freq = 7000000;
-double freq_to_add = 0;
-
 int array_freq[8];
 
+String mode = "RX";
+String oldMode = "";
 
 class Rect {
 public:
@@ -67,6 +64,133 @@ public:
 };
 
 Rect selezioni[8];
+int band = 20;
+
+unsigned long freq;
+unsigned long freq_to_add = 0;
+unsigned long fmi_;
+unsigned long fma_;
+String bandMode;
+
+
+void changeBand(TSPoint punto) {
+  int pointX = map(punto.y, TS_MINX, TS_MAXX, tft.width(), 0);
+  int pointY = map(punto.x, TS_MINY, TS_MAXY, tft.height(), 0);
+  String change;
+
+  if (pointX >= 25 && pointX <= 55 && pointY >= 50 && pointY <= 60) {
+    band = 80;
+    change = "Y";
+  }
+
+  if (pointX >= 70 && pointX <= 100 && pointY >= 50 && pointY <= 60) {
+    band = 40;
+    change = "Y";
+  }
+
+  if (pointX >= 115 && pointX <= 145 && pointY >= 50 && pointY <= 60) {
+    band = 20;
+    change = "Y";
+  }
+
+  if (pointX >= 170 && pointX <= 200 && pointY >= 50 && pointY <= 60) {
+    band = 15;
+    change = "Y";
+  }
+
+  if (pointX >= 225 && pointX <= 255 && pointY >= 50 && pointY <= 60) {
+    band = 11;
+    change = "Y";
+  }
+
+  if (pointX >= 280 && pointX <= 310 && pointY >= 50 && pointY <= 60) {
+    band = 10;
+    change = "Y";
+  }
+
+
+  if (change == "Y") {
+    printBand();
+    set_freq();
+    check_freq();
+    fill_array_zero();
+    fill_array(freq);
+    refreshDigits();
+    printBandMode();
+
+  }
+
+    
+}
+void printBand() {
+  tft.setCursor(25, 50);
+  tft.setTextSize(2);
+  if (band == 80) {
+    tft.setTextColor(RED);
+  } else {
+    tft.setTextColor(WHITE);
+  }
+  tft.print("80m ");
+  if (band == 40) {
+    tft.setTextColor(RED);
+  } else {
+    tft.setTextColor(WHITE);
+  }
+  tft.print("40m ");
+  if (band == 20) {
+    tft.setTextColor(RED);
+  } else {
+    tft.setTextColor(WHITE);
+  }
+  tft.print("20m ");
+  if (band == 15) {
+    tft.setTextColor(RED);
+  } else {
+    tft.setTextColor(WHITE);
+  }
+  tft.print("15m ");
+
+  if (band == 11) {
+    tft.setTextColor(RED);
+  } else {
+    tft.setTextColor(WHITE);
+  }
+  tft.print("11m ");
+
+  if (band == 10) {
+    tft.setTextColor(RED);
+  } else {
+    tft.setTextColor(WHITE);
+  }
+  tft.print("10m ");
+}
+
+void printMode() {
+  tft.setCursor(1, 10);
+  tft.setTextSize(2);
+  tft.setTextColor(BLACK);
+  tft.print("Mode:" + oldMode);
+
+  tft.print("                ");
+  tft.setCursor(1, 10);
+  tft.setTextColor(WHITE);
+  tft.print("Mode:" + mode);
+}
+
+void changeMode(TSPoint punto) {
+
+  int pointX = map(punto.y, TS_MINX, TS_MAXX, tft.width(), 0);
+  int pointY = map(punto.x, TS_MINY, TS_MAXY, tft.height(), 0);
+  if (pointX >= 1 && pointX <= 40 && pointY >= 10 && pointY <= 20) {
+    oldMode = mode;
+    if (mode == "RX") {
+      mode = "RX/TX";
+    } else {
+      mode = "RX";
+    }
+    printMode();
+  }
+}
 
 void fillSelezioni() {
 
@@ -111,15 +235,6 @@ void fillSelezioni() {
   selezioni[7].height = 35;
 }
 
-int convert_array(void) {
-
-  for (int i = 0; i < 8; i++) {
-    freq *= 10;
-    freq += array_freq[i];
-  }
-  return freq;
-}
-
 int countDigit(long n) {
   if (n == 0)
     return 1;
@@ -132,28 +247,10 @@ int countDigit(long n) {
 }
 
 void fill_array(long number) {
-  /*Serial.print("fill_array: ");
-  Serial.println(number);*/
-  
-
   for (int i = 7; i >= 0; i--) {
-    /*Serial.print("i dentro ciclo: ");
-    Serial.println(i);
-    Serial.print("array_freq[");
-    Serial.print(i);
-    Serial.print("]: ");
-    Serial.println(array_freq[i]);*/
     array_freq[i] = number % 10;
-    /*Serial.print("array_freq[");
-    Serial.print(i);
-    Serial.print("]: ");
-    Serial.println(array_freq[i]);*/
     number /= 10;
-    /*Serial.print("n dentro ciclo: ");
-    Serial.println(number);*/
-  
   }
-
 }
 
 void fill_array_zero(void) {
@@ -176,11 +273,11 @@ int whatDigit(TSPoint punto) {
     if (pointX >= selezioni[i].x && pointX <= (selezioni[i].x + selezioni[i].width) && pointY >= selezioni[i].y && pointY <= (selezioni[i].y + selezioni[i].height)) {
       tft.drawRect(selezioni[i].x, selezioni[i].y, selezioni[i].width, selezioni[i].height, RED);
       freq_to_add = round(pow(static_cast<double>(10), static_cast<double>(static_cast<double>(7) - static_cast<double>(i))));
-      Serial.println(freq_to_add);
       return 0;
     }
   }
   freq_to_add = 0;
+      
   return 0;
 }
 
@@ -197,8 +294,91 @@ void refreshDigits(void) {
   tft.drawChar(310, 120, 'z', WHITE, 2, 2);
 }
 
-void setup(void) {
 
+bool isUp(TSPoint punto) {
+
+  int pointX = map(punto.y, TS_MINX, TS_MAXX, tft.width(), 0);
+  int pointY = map(punto.x, TS_MINY, TS_MAXY, tft.height(), 0);
+
+  if (pointX >= 50 & pointX <= 120 && pointY >= 165 && pointY <= 215) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool isDown(TSPoint punto) {
+
+  int pointX = map(punto.y, TS_MINX, TS_MAXX, tft.width(), 0);
+  int pointY = map(punto.x, TS_MINY, TS_MAXY, tft.height(), 0);
+
+  if (pointX >= 150 & pointX <= 220 && pointY >= 165 && pointY <= 215) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+
+void set_freq() {
+  if (band == 80) freq = 3500000;
+  if (band == 40) freq = 7000000;
+  if (band == 20) freq = 14000000;
+  if (band == 15) freq = 21000000;
+  if (band == 11) freq = 26500000;
+  if (band == 10) freq = 28000000;
+}
+
+
+void check_freq() {
+
+  if (band == 80) {
+    fmi_ = 3500000;
+    fma_ = 3580000;
+    bandMode = "LSB";
+  }
+  if (band == 40) {
+    fmi_ = 7000000;
+    fma_ = 7350000;
+    bandMode = "LSB";
+  }
+  if (band == 20) {
+    fmi_ = 14000000;
+    fma_ = 14380000;
+    bandMode = "USB";
+  }
+  if (band == 15) {
+    fmi_ = 21000000;
+    fma_ = 21650000;
+    bandMode = "USB";
+  }
+  if (band == 11) {
+    fmi_ = 26500000;
+    fma_ = 27500000;
+    bandMode = "USB";
+  }
+  if (band == 10) {
+    fmi_ = 28000000;
+    fma_ = 28800000;
+    bandMode = "USB";
+  }
+}
+
+void printBandMode(){
+
+  tft.setCursor(280, 10);
+  tft.setTextSize(2);
+  tft.setTextColor(BLACK);
+  tft.print("LSB");
+  tft.setCursor(280, 10);
+  tft.print("USB");
+  tft.setCursor(280, 10);  
+  tft.setTextColor(WHITE);
+  tft.print(bandMode);
+
+}
+
+void setup(void) {
   fillSelezioni();
   Serial.begin(9600);
   tft.reset();
@@ -207,33 +387,30 @@ void setup(void) {
   tft.setRotation(1);
   tft.fillScreen(BLACK);
   tft.drawLine(1, 30, 320, 30, WHITE);
+  check_freq();
+  set_freq();
   fill_array_zero();
   fill_array(freq);
   resertSelection();
   refreshDigits();
+  printMode();
+  printBand();
+  tft.drawLine(1, 90, 320, 90, WHITE);
+  printBandMode();
 
-  // bottone push
+  // bottone UP
+  tft.drawRect(50, 165, 70, 50, WHITE);
+  tft.drawChar(70, 180, 'U', WHITE, 2, 2);
+  tft.drawChar(90, 180, 'P', WHITE, 2, 2);
+  // bottone DOWN
+  tft.drawRect(150, 165, 70, 50, WHITE);
+  tft.drawChar(155, 180, 'D', WHITE, 2, 2);
+  tft.drawChar(170, 180, 'O', WHITE, 2, 2);
+  tft.drawChar(185, 180, 'W', WHITE, 2, 2);
+  tft.drawChar(200, 180, 'N', WHITE, 2, 2);
 
-  tft.drawRect(100, 150, 100, 50, WHITE);
-  tft.drawChar(120, 160, 'P', WHITE, 2, 3);
-  tft.drawChar(135, 160, 'U', WHITE, 2, 3);
-  tft.drawChar(150, 160, 'S', WHITE, 2, 3);
-  tft.drawChar(165, 160, 'H', WHITE, 2, 3);
 
   pinMode(13, OUTPUT);
-}
-
-bool isUp(TSPoint punto) {
-
-  int pointX = map(punto.y, TS_MINX, TS_MAXX, tft.width(), 0);
-  int pointY = map(punto.x, TS_MINY, TS_MAXY, tft.height(), 0);
-
-  if (pointX >= 100 & pointX <= 200 && pointY >= 150 && pointY <= 200) {
-    return true;
-  } else {
-    resertSelection();
-    return false;
-  }
 }
 
 void loop(void) {
@@ -246,27 +423,26 @@ void loop(void) {
   pinMode(YP, OUTPUT);
 
   if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
-
     if (isUp(p)) {
-      freq = freq + freq_to_add;
-      fill_array_zero();
-      fill_array(freq);
-      refreshDigits();
+      if ((freq + freq_to_add) <= fma_) {
+        freq = freq + freq_to_add;
+        fill_array_zero();
+        fill_array(freq);
+        refreshDigits();
+      }
+    } else if (isDown(p)) {
+      if ((freq - freq_to_add) >= fmi_) {
+        freq = freq - freq_to_add;
+        fill_array_zero();
+        fill_array(freq);
+        refreshDigits();
+      }
     } else {
+      resertSelection();
       whatDigit(p);
+      changeMode(p);
+      changeBand(p);
     }
-    Serial.print("X = ");
-    Serial.print(x);
-    Serial.print("\tY = ");
-    Serial.print(y);
-    Serial.print("\tPressure = ");
-    Serial.println(p.z);
-    Serial.println(freq_to_add);
-    delay(100);
-
-    Serial.print("p.x = ");
-    Serial.print(p.x);
-    Serial.print("\tp.y = ");
-    Serial.print(p.y);
+    delay(50);
   }
 }
